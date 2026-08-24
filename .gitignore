@@ -1,0 +1,78 @@
+# ==============================================================================
+# 1. File Besar / External Binaries (Bagian 3B PROJECT_CONTEXT)
+# ==============================================================================
+# Exclude model weights faster-whisper (didownload saat CI / manual setup lokal)
+assets/models/faster-whisper-base/
+assets/models/*
+!assets/models/README.md
+!assets/models/.gitkeep
+
+# Exclude FFmpeg binaries (didownload saat CI / manual setup lokal)
+bin/ffmpeg_linux/ffmpeg
+bin/ffmpeg_windows/ffmpeg.exe
+bin/ffmpeg_linux/*
+bin/ffmpeg_windows/*
+!bin/ffmpeg_linux/README.md
+!bin/ffmpeg_windows/README.md
+!bin/ffmpeg_linux/.gitkeep
+!bin/ffmpeg_windows/.gitkeep
+
+# Catatan: assets/fonts/ tetap di-track secara penuh (tidak di-ignore)
+
+# ==============================================================================
+# 2. Python Environment & Artifacts
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==============================================================================
+# 2B. Hasil Build PyInstaller yang nyasar ke root (bukan di dalam dist/)
+# ==============================================================================
+# Folder pendukung hasil PyInstaller --onedir (berisi semua library +
+# model + ffmpeg yang ikut ter-bundle)
+_internal/
+
+# File executable hasil build (nama tanpa ekstensi, khusus Linux).
+# Pakai slash di depan supaya HANYA match persis di root, tidak di
+# folder lain manapun.
+/lyric-green-screen
+
+# ==============================================================================
+# 3. Project Output & Temp Files
+# ==============================================================================
+*.mp4
+*.wav
+*.mp3
+*.lyricproj
+tmp/
+temp/
+
+# ==============================================================================
+# 4. OS & Editor Artifacts
+# ==============================================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

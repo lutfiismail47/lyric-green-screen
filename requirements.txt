@@ -1,0 +1,17 @@
+# GUI & Audio Playback
+PyQt6>=6.6.0
+
+# Speech to Text (Offline CTranslate2 backend)
+faster-whisper>=1.0.0
+
+# Waveform Audio Analysis & Visualization
+librosa>=0.10.1
+pyqtgraph>=0.13.3
+numpy>=1.24.0
+soundfile>=0.12.1
+
+# Frame Rendering & Image Manipulation
+Pillow>=10.0.0
+
+# Packaging (Optional at runtime, required for building)
+pyinstaller>=6.0.0

@@ -1,0 +1,117 @@
+name: Build and Package Desktop App
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: lyric-app-linux
+            ffmpeg_dir: bin/ffmpeg_linux
+            target_binary: lyric-green-screen
+          - os: windows-latest
+            artifact_name: lyric-app-windows
+            ffmpeg_dir: bin/ffmpeg_windows
+            target_binary: lyric-green-screen.exe
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------
+      # Setup Python Environment (Sesuai Bagian 3 PROJECT_CONTEXT: Python 3.11)
+      # ---------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install System Dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpython3.11 libpython3.11-dev libegl1 libgl1-mesa-glx libxkbcommon0
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ---------------------------------------------------------
+      # Step 1: Download Whisper Model secara Lokal
+      # Model disimpan ke assets/models/faster-whisper-base/
+      # ---------------------------------------------------------
+      - name: Download Whisper Model (faster-whisper-base)
+        shell: bash
+        run: |
+          python -c "
+          from faster_whisper import download_model
+          import shutil
+          from pathlib import Path
+
+          target_dir = Path('assets/models/faster-whisper-base')
+          target_dir.parent.mkdir(parents=True, exist_ok=True)
+
+          print('Mengunduh model base via faster_whisper API...')
+          downloaded_path = download_model('base', output_dir=str(target_dir))
+          print(f'Model berhasil diunduh ke: {target_dir}')
+          "
+
+      # ---------------------------------------------------------
+      # Step 2: Download Static FFmpeg Binary (Linux)
+      # Menggunakan build static rilis resmi johnvansickle.com
+      # ---------------------------------------------------------
+      - name: Download FFmpeg Static Binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p bin/ffmpeg_linux
+          wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf ffmpeg-release-amd64-static.tar.xz
+          cp ffmpeg-*-amd64-static/ffmpeg bin/ffmpeg_linux/ffmpeg
+          chmod +x bin/ffmpeg_linux/ffmpeg
+          rm -rf ffmpeg-*-amd64-static*
+
+      # ---------------------------------------------------------
+      # Step 3: Download Static FFmpeg Binary (Windows)
+      # Menggunakan build static rilis resmi gyan.dev
+      # ---------------------------------------------------------
+      - name: Download FFmpeg Static Binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin/ffmpeg_windows
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted"
+          $ffmpegExe = Get-ChildItem -Path "ffmpeg_extracted" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+          Copy-Item -Path $ffmpegExe.FullName -Destination "bin/ffmpeg_windows/ffmpeg.exe"
+          Remove-Item -Recurse -Force "ffmpeg_extracted", "ffmpeg.zip"
+
+      # ---------------------------------------------------------
+      # Step 4: Build PyInstaller Menggunakan .spec
+      # ---------------------------------------------------------
+      - name: Build Executable via PyInstaller
+        shell: bash
+        run: |
+          pyinstaller -y --clean lyric_generator.spec
+
+      # ---------------------------------------------------------
+      # Step 5: Upload Artifact Hasil Build
+      # ---------------------------------------------------------
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/lyric-green-screen/
+          retention-days: 14
