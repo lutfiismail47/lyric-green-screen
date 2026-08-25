@@ -17,6 +17,7 @@ ffmpeg_subfolder = 'ffmpeg_windows' if is_windows else 'ffmpeg_linux'
 datas = [
     (str(project_root / 'assets' / 'fonts'), 'assets/fonts'),
     (str(project_root / 'assets' / 'models'), 'assets/models'),
+    (str(project_root / 'assets'), 'assets'),
     (str(project_root / 'bin' / ffmpeg_subfolder), f'bin/{ffmpeg_subfolder}'),
 ]
 
@@ -67,6 +68,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=str(project_root / 'assets' / 'icon.png'),
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

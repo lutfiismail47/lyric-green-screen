@@ -2,13 +2,22 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, Callable
 from PIL import Image, ImageDraw, ImageFont, ImageColor
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap, QColor
+from PyQt6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QComboBox,
+    QPushButton,
+    QColorDialog,
+    QGroupBox,
+    QSpinBox
+)
 
 
 def resolve_asset_path(relative_path: str | Path) -> Path:
-    """Mendeteksi lokasi asset baik di mode dev maupun PyInstaller bundle."""
     rel_p = Path(relative_path)
     if getattr(sys, 'frozen', False):
         meipass_dir = Path(getattr(sys, '_MEIPASS', ''))
@@ -127,7 +136,7 @@ def draw_wrapped_text(
         start_y = int(canvas_height * 0.15) + dy
     elif position_type == "bottom":
         start_y = int(canvas_height * 0.85) - total_height + dy
-    else:  # "center"
+    else:
         start_y = (canvas_height - total_height) // 2 + dy
 
     current_y = start_y
@@ -143,9 +152,10 @@ def draw_wrapped_text(
         current_y += lh + line_spacing
 
 
-# --- Preview Widget ---
-
 class PreviewWidget(QWidget):
+    style_changed = pyqtSignal(dict)
+    video_settings_changed = pyqtSignal(dict)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -169,23 +179,155 @@ class PreviewWidget(QWidget):
         self._cached_font_key = None
 
         self._init_ui()
+        self._populate_available_fonts()
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(6)
+
+        # 1. Screen Viewport
         self.label_screen = QLabel(self)
         self.label_screen.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_screen.setMinimumSize(320, 180)
         self.label_screen.setStyleSheet("background-color: #000000; border-radius: 4px;")
-        
-        layout.addWidget(self.label_screen)
+        main_layout.addWidget(self.label_screen)
+
+        # 2. Styling Toolbar
+        control_box = QGroupBox("Style Settings", self)
+        ctrl_layout = QHBoxLayout(control_box)
+        ctrl_layout.setContentsMargins(8, 6, 8, 6)
+        ctrl_layout.setSpacing(10)
+
+        # Font Dropdown
+        ctrl_layout.addWidget(QLabel("Font:"))
+        self.combo_fonts = QComboBox(self)
+        self.combo_fonts.currentIndexChanged.connect(self._on_font_selected)
+        ctrl_layout.addWidget(self.combo_fonts)
+
+        # SpinBox Ukuran Font
+        ctrl_layout.addWidget(QLabel("Size:"))
+        self.spin_font_size = QSpinBox(self)
+        self.spin_font_size.setRange(20, 200)
+        self.spin_font_size.setValue(int(self.style.get("font_size", 64)))
+        self.spin_font_size.setSingleStep(2)
+        self.spin_font_size.valueChanged.connect(self._on_font_size_changed)
+        ctrl_layout.addWidget(self.spin_font_size)
+
+        # Tombol Warna Teks
+        ctrl_layout.addWidget(QLabel("Text Color:"))
+        self.btn_color = QPushButton("Pick Color", self)
+        self.btn_color.setStyleSheet(f"background-color: {self.style['text_color']}; color: #000000; font-weight: bold;")
+        self.btn_color.clicked.connect(self._on_choose_color)
+        ctrl_layout.addWidget(self.btn_color)
+
+        # Tombol Warna Latar (Green Screen / Custom BG)
+        ctrl_layout.addWidget(QLabel("Background:"))
+        self.btn_bg_color = QPushButton("Pick Color", self)
+        self.btn_bg_color.setStyleSheet(f"background-color: {self.video_settings['green_color']}; color: #000000; font-weight: bold;")
+        self.btn_bg_color.clicked.connect(self._on_choose_bg_color)
+        ctrl_layout.addWidget(self.btn_bg_color)
+
+        ctrl_layout.addStretch()
+        main_layout.addWidget(control_box)
+
         self.render_frame()
+
+    def _populate_available_fonts(self):
+        fonts_dir = resolve_asset_path("assets/fonts")
+        self.combo_fonts.blockSignals(True)
+        self.combo_fonts.clear()
+
+        found_fonts = []
+        if fonts_dir.exists() and fonts_dir.is_dir():
+            found_fonts = sorted(list(fonts_dir.glob("*.ttf")) + list(fonts_dir.glob("*.otf")))
+
+        current_path_name = Path(self.style.get("font_path", "")).name
+
+        if found_fonts:
+            for font_file in found_fonts:
+                rel_path = f"assets/fonts/{font_file.name}"
+                display_name = font_file.stem.replace("-", " ")
+                self.combo_fonts.addItem(display_name, userData=rel_path)
+                
+                if font_file.name == current_path_name:
+                    self.combo_fonts.setCurrentIndex(self.combo_fonts.count() - 1)
+        else:
+            self.combo_fonts.addItem("Default Font", userData="assets/fonts/Poppins-Bold.ttf")
+
+        self.combo_fonts.blockSignals(False)
+
+    def _on_font_selected(self, index: int):
+        font_path = self.combo_fonts.itemData(index)
+        if font_path:
+            self.style["font_path"] = font_path
+            self._cached_font = None
+            self.render_frame()
+            self.style_changed.emit(self.style)
+
+    def _on_font_size_changed(self, val: int):
+        self.style["font_size"] = val
+        self._cached_font = None
+        self.render_frame()
+        self.style_changed.emit(self.style)
+
+    def _on_choose_color(self):
+        initial_color = QColor(self.style.get("text_color", "#FFFFFF"))
+        color = QColorDialog.getColor(initial_color, self, "Pilih Warna Teks Lirik")
+        
+        if color.isValid():
+            hex_color = color.name().upper()
+            self.style["text_color"] = hex_color
+            btn_txt_color = "#000000" if color.lightness() > 128 else "#FFFFFF"
+            self.btn_color.setStyleSheet(
+                f"background-color: {hex_color}; color: {btn_txt_color}; font-weight: bold;"
+            )
+            self.render_frame()
+            self.style_changed.emit(self.style)
+
+    def _on_choose_bg_color(self):
+        initial_color = QColor(self.video_settings.get("green_color", "#00FF00"))
+        color = QColorDialog.getColor(initial_color, self, "Pilih Warna Latar Belakang")
+        
+        if color.isValid():
+            hex_color = color.name().upper()
+            self.video_settings["green_color"] = hex_color
+            btn_txt_color = "#000000" if color.lightness() > 128 else "#FFFFFF"
+            self.btn_bg_color.setStyleSheet(
+                f"background-color: {hex_color}; color: {btn_txt_color}; font-weight: bold;"
+            )
+            self.render_frame()
+            self.video_settings_changed.emit(self.video_settings)
 
     def set_config(self, style: Dict[str, Any], video_settings: Dict[str, Any]):
         self.style.update(style)
         self.video_settings.update(video_settings)
         self._cached_font = None
+
+        self.spin_font_size.blockSignals(True)
+        self.spin_font_size.setValue(int(self.style.get("font_size", 64)))
+        self.spin_font_size.blockSignals(False)
+
+        # Sync tombol warna teks
+        cur_color = self.style.get("text_color", "#FFFFFF")
+        qcol = QColor(cur_color)
+        btn_txt = "#000000" if qcol.lightness() > 128 else "#FFFFFF"
+        self.btn_color.setStyleSheet(f"background-color: {cur_color}; color: {btn_txt}; font-weight: bold;")
+
+        # Sync tombol warna latar
+        cur_bg = self.video_settings.get("green_color", "#00FF00")
+        qbg = QColor(cur_bg)
+        bg_btn_txt = "#000000" if qbg.lightness() > 128 else "#FFFFFF"
+        self.btn_bg_color.setStyleSheet(f"background-color: {cur_bg}; color: {bg_btn_txt}; font-weight: bold;")
+
+        # Sync dropdown font
+        cur_font_name = Path(self.style.get("font_path", "")).name
+        for i in range(self.combo_fonts.count()):
+            f_data = self.combo_fonts.itemData(i)
+            if f_data and Path(f_data).name == cur_font_name:
+                self.combo_fonts.setCurrentIndex(i)
+                break
+
         self.render_frame()
 
     def update_state(self, current_time: float, active_segment: Optional[Dict[str, Any]]):
@@ -195,7 +337,7 @@ class PreviewWidget(QWidget):
 
     def _get_font(self) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         font_path = self.style.get("font_path", "assets/fonts/Poppins-Bold.ttf")
-        font_size = self.style.get("font_size", 64)
+        font_size = int(self.style.get("font_size", 64))
         key = (str(font_path), font_size)
 
         if self._cached_font is None or self._cached_font_key != key:
@@ -225,7 +367,6 @@ class PreviewWidget(QWidget):
             
             t_dur = max(0.01, float(self.style.get("transition_duration", 0.3)))
             
-            # Hitung progress transisi
             progress_in = (self.current_time - start_t) / t_dur if self.current_time >= start_t else 0.0
             progress_out = (end_t - self.current_time) / t_dur if self.current_time <= end_t else 0.0
 
@@ -233,7 +374,6 @@ class PreviewWidget(QWidget):
             transition_func = TRANSITION_REGISTRY.get(trans_type, apply_fade_transition)
             alpha, offset_xy = transition_func(progress_in, progress_out, base_alpha=255)
 
-            # Jika preview sedang di-pause tepat di awal atau di tengah segmen
             if alpha <= 0 and start_t <= self.current_time <= end_t:
                 alpha = 255
 

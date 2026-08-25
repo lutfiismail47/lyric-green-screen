@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Optional, Dict, Any
-from PyQt6.QtCore import Qt, QUrl, QTimer
+from PyQt6.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtWidgets import (
@@ -11,17 +11,17 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QPushButton,
     QFileDialog,
-    QMessageBox
+    QMessageBox,
+    QProgressDialog,
+    QInputDialog
 )
 from ui.editor_widget import LyricsEditorWidget
 from ui.waveform_widget import WaveformWidget
 from ui.preview_widget import PreviewWidget
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtWidgets import QProgressDialog
 from core.transcriber import AudioTranscriber
-from PyQt6.QtWidgets import QProgressDialog, QFileDialog, QMessageBox
 from core.renderer import FrameRenderer
 from core.exporter import VideoExportWorker
+from core.project_io import save_project_file, load_project_file, ProjectIOError
 
 
 class TranscriptionWorker(QThread):
@@ -62,18 +62,19 @@ class MainWindow(QMainWindow):
 
         self.current_audio_path: Optional[str] = None
         self._is_user_seeking: bool = False
+        self.current_project_path: Optional[str] = None
 
         # Inisialisasi Audio Player bawaan PyQt6
         self._init_player()
 
-        # Inisialisasi Menu, Toolbar, dan Layout UI
+        # Inisialisasi Toolbar dan Layout UI
         self._init_menu_and_toolbar()
         self._init_ui()
 
         # Hubungkan semua signals antar widget
         self._connect_signals()
 
-        # Timer loop rendering (30 FPS ≈ 33ms) untuk sinkronisasi preview yang efisien & halus
+        # Timer loop rendering (30 FPS ≈ 33ms)
         self.render_timer = QTimer(self)
         self.render_timer.setInterval(33)
         self.render_timer.timeout.connect(self._on_render_tick)
@@ -85,11 +86,8 @@ class MainWindow(QMainWindow):
         self.audio_output.setVolume(1.0)
 
     def _init_menu_and_toolbar(self):
-        menubar = self.menuBar()
-        toolbar = self.addToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-
-        file_menu = menubar.addMenu("&File")
+        # Sembunyikan QMenuBar bawaan
+        self.menuBar().setVisible(False)
 
         self.action_new = QAction("New Project", self)
         self.action_open = QAction("Open Project", self)
@@ -99,15 +97,8 @@ class MainWindow(QMainWindow):
         self.action_exit = QAction("Exit", self)
         self.action_exit.triggered.connect(self.close)
 
-        file_menu.addAction(self.action_new)
-        file_menu.addAction(self.action_open)
-        file_menu.addAction(self.action_save)
-        file_menu.addSeparator()
-        file_menu.addAction(self.action_import_audio)
-        file_menu.addAction(self.action_export_video)
-        file_menu.addSeparator()
-        file_menu.addAction(self.action_exit)
-
+        toolbar = self.addToolBar("Main Toolbar")
+        toolbar.setMovable(False)
         toolbar.addAction(self.action_new)
         toolbar.addAction(self.action_open)
         toolbar.addAction(self.action_save)
@@ -183,8 +174,13 @@ class MainWindow(QMainWindow):
         # 5. Editor Data Changes -> Update Marker di Waveform & Refresh Preview
         self.editor_area.data_changed.connect(self._on_editor_data_changed)
 
-        # 6. Hubungkan tombol/menu export (TARUH DI SINI)
+        # 6. Hubungkan tombol export
         self.action_export_video.triggered.connect(self._on_export_video_dialog)
+
+        # Hubungkan tombol toolbar Project
+        self.action_new.triggered.connect(self._on_new_project)
+        self.action_save.triggered.connect(self._on_save_project)
+        self.action_open.triggered.connect(self._on_open_project)
 
     # --- Audio Playback Logic ---
 
@@ -252,21 +248,17 @@ class MainWindow(QMainWindow):
     # --- Event Handlers Antar Widget ---
 
     def _on_segment_selected_in_editor(self, segment: Dict[str, Any]):
-        """Seek audio player saat user mengklik baris tertentu di tabel."""
         start_time = segment.get("start", 0.0)
         self._seek_to_time(start_time)
 
     def _on_editor_data_changed(self):
-        """Sinkronisasi marker batas di waveform saat ada edit teks/waktu/split/merge."""
         segments = self.editor_area.export_segments()
         self.waveform_area.update_segments(segments)
         
-        # Refresh preview tampilan terkini
         current_sec = self.player.position() / 1000.0
         self._sync_ui_state(current_sec)
 
     def _on_import_audio_dialog(self):
-        """Dialog import audio untuk memuat waveform & source audio player."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Pilih File Audio",
@@ -277,7 +269,6 @@ class MainWindow(QMainWindow):
             self.load_audio_file(file_path)
 
     def load_audio_file(self, audio_path: str):
-        """Memuat audio dan langsung mentranskripsi lirik secara otomatis."""
         path = Path(audio_path).resolve()
         if not path.exists():
             QMessageBox.critical(self, "Error", f"File audio tidak ditemukan: {path}")
@@ -286,18 +277,15 @@ class MainWindow(QMainWindow):
         self._stop_audio()
         self.current_audio_path = str(path)
 
-        # 1. Set source ke player & load visual waveform
         self.player.setSource(QUrl.fromLocalFile(self.current_audio_path))
         self.waveform_area.load_audio(self.current_audio_path)
 
-        # 2. Siapkan Progress Dialog
         self.transcribe_dialog = QProgressDialog("Mendeteksi lirik dari audio...", "Batal", 0, 100, self)
         self.transcribe_dialog.setWindowTitle("Speech-to-Text Otomatis")
         self.transcribe_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.transcribe_dialog.setMinimumDuration(0)
         self.transcribe_dialog.setValue(0)
 
-        # 3. Jalankan Transkripsi di Background Thread
         self.transcribe_worker = TranscriptionWorker(self.current_audio_path)
         
         self.transcribe_worker.progress_changed.connect(
@@ -311,9 +299,7 @@ class MainWindow(QMainWindow):
         self.transcribe_worker.start()
 
     def _on_transcription_finished(self, segments: list):
-        """Dipanggil saat Whisper selesai mengekstrak lirik dan timestamp."""
         self.transcribe_dialog.close()
-        # Otomatis isi tabel editor dan marker waveform
         self.editor_area.load_segments(segments)
         self.waveform_area.update_segments(segments)
         QMessageBox.information(
@@ -333,7 +319,6 @@ class MainWindow(QMainWindow):
         )
 
     def _on_export_video_dialog(self):
-        """Membuka dialog penyimpanan file dan memulai proses export video."""
         if not self.current_audio_path:
             QMessageBox.warning(self, "Peringatan", "Silakan import file audio terlebih dahulu.")
             return
@@ -343,7 +328,28 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Peringatan", "Tidak ada segmen lirik untuk diekspor.")
             return
 
-        # 1. Buka dialog save file MP4
+        # 1. Dialog Pemilihan Resolusi Video
+        resolutions = {
+            "1080p (Full HD - 1920x1080)": [1920, 1080],
+            "720p (HD - 1280x720)": [1280, 720],
+            "480p (SD - 854x480)": [854, 480],
+        }
+        res_items = list(resolutions.keys())
+        
+        selected_res_label, ok = QInputDialog.getItem(
+            self,
+            "Pilih Resolusi Video",
+            "Resolusi Output:",
+            res_items,
+            current=0,
+            editable=False
+        )
+        if not ok or not selected_res_label:
+            return
+
+        target_resolution = resolutions[selected_res_label]
+
+        # 2. Buka dialog penyimpanan file MP4
         output_path, _ = QFileDialog.getSaveFileName(
             self,
             "Simpan Video Green Screen",
@@ -353,24 +359,30 @@ class MainWindow(QMainWindow):
         if not output_path:
             return
 
-        # 2. Hitung total durasi video berdasarkan player/segmen terakhir
+        # 3. Hitung total durasi video
         total_duration = self.player.duration() / 1000.0
         if total_duration <= 0 and segments:
             total_duration = segments[-1]["end"] + 1.0
 
-        # 3. Siapkan Konfigurasi Renderer
-        style = self.preview_area.style
-        video_settings = self.preview_area.video_settings
-        renderer = FrameRenderer(style, video_settings, segments)
+        # 4. Siapkan konfigurasi video_settings dan scale font_size secara proporsional
+        base_style = dict(self.preview_area.style)
+        video_settings = dict(self.preview_area.video_settings)
+        video_settings["resolution"] = target_resolution
 
-        # 4. Siapkan Progress Dialog
+        # Skala ukuran font terhadap baseline 1080p agar proporsi tampilan tetap konsisten
+        scale_factor = target_resolution[1] / 1080.0
+        base_style["font_size"] = max(12, int(base_style.get("font_size", 64) * scale_factor))
+
+        renderer = FrameRenderer(base_style, video_settings, segments)
+
+        # 5. Siapkan Progress Dialog
         self.export_dialog = QProgressDialog("Menyiapkan render video...", "Batal", 0, 100, self)
         self.export_dialog.setWindowTitle("Export Video Green Screen")
         self.export_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.export_dialog.setMinimumDuration(0)
         self.export_dialog.setValue(0)
 
-        # 5. Jalankan Worker Thread
+        # 6. Jalankan Worker Thread
         self.export_worker = VideoExportWorker(
             renderer=renderer,
             audio_path=self.current_audio_path,
@@ -405,3 +417,104 @@ class MainWindow(QMainWindow):
             "Export Gagal",
             f"Terjadi kesalahan saat memproses video:\n{err_msg}"
         )
+
+    # --- Project Management Handlers ---
+
+    def _on_new_project(self):
+        """Mereset state kerja untuk memulai proyek baru."""
+        if self.editor_area.export_segments() or self.current_audio_path:
+            reply = QMessageBox.question(
+                self,
+                "Proyek Baru",
+                "Apakah Anda yakin ingin membuat proyek baru? Perubahan yang belum disimpan akan hilang.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        self._stop_audio()
+        self.current_audio_path = None
+        self.current_project_path = None
+        self.editor_area.load_segments([])
+        self.waveform_area.load_audio("")
+        self.preview_area.update_state(0.0, None)
+        self.setWindowTitle("Lyric Green Screen Generator - Proyek Baru")
+
+    def _on_save_project(self):
+        """Menyimpan data audio, segmen lirik, style, dan video settings ke file .lyricproj."""
+        if not self.current_audio_path and not self.editor_area.export_segments():
+            QMessageBox.warning(self, "Peringatan", "Tidak ada data proyek untuk disimpan.")
+            return
+
+        # Buka dialog save jika belum ada path file project aktif
+        if not self.current_project_path:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Simpan Proyek",
+                "my_lyrics.lyricproj",
+                "Lyric Project Files (*.lyricproj)"
+            )
+            if not file_path:
+                return
+            self.current_project_path = file_path
+
+        project_data = {
+            "version": "1.0",
+            "audio_path": self.current_audio_path or "",
+            "segments": self.editor_area.export_segments(),
+            "style": self.preview_area.style,
+            "video_settings": self.preview_area.video_settings
+        }
+
+        try:
+            save_project_file(self.current_project_path, project_data)
+            self.setWindowTitle(f"Lyric Green Screen Generator - {Path(self.current_project_path).name}")
+            QMessageBox.information(self, "Tersimpan", "Proyek berhasil disimpan!")
+        except ProjectIOError as err:
+            QMessageBox.critical(self, "Error", f"Gagal menyimpan proyek:\n{err}")
+
+    def _on_open_project(self):
+        """Membuka file .lyricproj dan memulihkan seluruh state aplikasi."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Buka Proyek",
+            "",
+            "Lyric Project Files (*.lyricproj)"
+        )
+        if not file_path:
+            return
+
+        try:
+            project_data = load_project_file(file_path)
+            self.current_project_path = file_path
+
+            # 1. Pulihkan Style & Video Settings (Font, Ukuran, Warna Teks, Warna Background)
+            self.preview_area.set_config(
+                style=project_data.get("style", {}),
+                video_settings=project_data.get("video_settings", {})
+            )
+
+            # 2. Pulihkan Audio & Waveform jika ada path audio
+            audio_p = project_data.get("audio_path", "")
+            if audio_p and Path(audio_p).exists():
+                self._stop_audio()
+                self.current_audio_path = str(Path(audio_p).resolve())
+                self.player.setSource(QUrl.fromLocalFile(self.current_audio_path))
+                self.waveform_area.load_audio(self.current_audio_path)
+            else:
+                self.current_audio_path = None
+                self.waveform_area.load_audio("")
+
+            # 3. Pulihkan Data Segmen Lirik ke Editor & Marker Waveform
+            segments = project_data.get("segments", [])
+            self.editor_area.load_segments(segments)
+            self.waveform_area.update_segments(segments)
+
+            # 4. Sinkronisasi Tampilan Awal
+            self._sync_ui_state(0.0)
+            self.setWindowTitle(f"Mimik | Turn Audio into Lyrics, Instantly - {Path(file_path).name}")
+            QMessageBox.information(self, "Berhasil", "Proyek berhasil dimuat!")
+
+        except ProjectIOError as err:
+            QMessageBox.critical(self, "Error", f"Gagal membuka proyek:\n{err}")

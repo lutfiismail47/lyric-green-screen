@@ -3,9 +3,14 @@ name: Build and Package Desktop App
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,9 +33,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------
-      # Setup Python Environment (Sesuai Bagian 3 PROJECT_CONTEXT: Python 3.11)
-      # ---------------------------------------------------------
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -49,10 +51,6 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ---------------------------------------------------------
-      # Step 1: Download Whisper Model secara Lokal
-      # Model disimpan ke assets/models/faster-whisper-base/
-      # ---------------------------------------------------------
       - name: Download Whisper Model (faster-whisper-base)
         shell: bash
         run: |
@@ -69,10 +67,6 @@ jobs:
           print(f'Model berhasil diunduh ke: {target_dir}')
           "
 
-      # ---------------------------------------------------------
-      # Step 2: Download Static FFmpeg Binary (Linux)
-      # Menggunakan build static rilis resmi johnvansickle.com
-      # ---------------------------------------------------------
       - name: Download FFmpeg Static Binary (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -83,10 +77,6 @@ jobs:
           chmod +x bin/ffmpeg_linux/ffmpeg
           rm -rf ffmpeg-*-amd64-static*
 
-      # ---------------------------------------------------------
-      # Step 3: Download Static FFmpeg Binary (Windows)
-      # Menggunakan build static rilis resmi gyan.dev
-      # ---------------------------------------------------------
       - name: Download FFmpeg Static Binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -98,20 +88,52 @@ jobs:
           Copy-Item -Path $ffmpegExe.FullName -Destination "bin/ffmpeg_windows/ffmpeg.exe"
           Remove-Item -Recurse -Force "ffmpeg_extracted", "ffmpeg.zip"
 
-      # ---------------------------------------------------------
-      # Step 4: Build PyInstaller Menggunakan .spec
-      # ---------------------------------------------------------
       - name: Build Executable via PyInstaller
         shell: bash
         run: |
           pyinstaller -y --clean lyric_generator.spec
 
-      # ---------------------------------------------------------
-      # Step 5: Upload Artifact Hasil Build
-      # ---------------------------------------------------------
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: dist/lyric-green-screen/
           retention-days: 14
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lyric-app-linux
+          path: release-linux/
+
+      - name: Download Windows Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lyric-app-windows
+          path: release-windows/
+
+      - name: Zip Linux Build
+        run: |
+          cd release-linux
+          zip -r ../lyric-green-screen-linux-${{ github.ref_name }}.zip .
+          cd ..
+
+      - name: Zip Windows Build
+        run: |
+          cd release-windows
+          zip -r ../lyric-green-screen-windows-${{ github.ref_name }}.zip .
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            lyric-green-screen-linux-${{ github.ref_name }}.zip
+            lyric-green-screen-windows-${{ github.ref_name }}.zip
+          generate_release_notes: true
