@@ -1,6 +1,4 @@
-# ==============================================================================
-# 1. File Besar / External Binaries (Bagian 3B PROJECT_CONTEXT)
-# ==============================================================================
+# File Besar / External Binaries (Bagian 3B PROJECT_CONTEXT)
 # Exclude model weights faster-whisper (didownload saat CI / manual setup lokal)
 assets/models/faster-whisper-base/
 assets/models/*
@@ -19,9 +17,7 @@ bin/ffmpeg_windows/*
 
 # Catatan: assets/fonts/ tetap di-track secara penuh (tidak di-ignore)
 
-# ==============================================================================
-# 2. Python Environment & Artifacts
-# ==============================================================================
+# Python Environment & Artifacts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -43,9 +39,7 @@ dist/
 .installed.cfg
 *.egg
 
-# ==============================================================================
-# 2B. Hasil Build PyInstaller yang nyasar ke root (bukan di dalam dist/)
-# ==============================================================================
+# Hasil Build PyInstaller yang nyasar ke root (bukan di dalam dist/)
 # Folder pendukung hasil PyInstaller --onedir (berisi semua library +
 # model + ffmpeg yang ikut ter-bundle)
 _internal/
@@ -54,10 +48,10 @@ _internal/
 # Pakai slash di depan supaya HANYA match persis di root, tidak di
 # folder lain manapun.
 /lyric-green-screen
+/mimik
+/auto-caption-generator
 
-# ==============================================================================
-# 3. Project Output & Temp Files
-# ==============================================================================
+# Project Output & Temp Files
 *.mp4
 *.wav
 *.mp3
@@ -65,9 +59,7 @@ _internal/
 tmp/
 temp/
 
-# ==============================================================================
-# 4. OS & Editor Artifacts
-# ==============================================================================
+# OS & Editor Artifacts
 .DS_Store
 Thumbs.db
 Desktop.ini

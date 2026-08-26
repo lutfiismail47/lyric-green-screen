@@ -40,7 +40,7 @@ def resolve_asset_path(relative_path: str | Path) -> Path:
     return rel_p.resolve()
 
 
-# --- Transition Interpolators ---
+# Transition Interpolators
 
 def apply_fade_transition(
     progress_in: float,
@@ -186,26 +186,22 @@ class PreviewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(6)
 
-        # 1. Screen Viewport
         self.label_screen = QLabel(self)
         self.label_screen.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_screen.setMinimumSize(320, 180)
         self.label_screen.setStyleSheet("background-color: #000000; border-radius: 4px;")
         main_layout.addWidget(self.label_screen)
 
-        # 2. Styling Toolbar
         control_box = QGroupBox("Style Settings", self)
         ctrl_layout = QHBoxLayout(control_box)
         ctrl_layout.setContentsMargins(8, 6, 8, 6)
         ctrl_layout.setSpacing(10)
 
-        # Font Dropdown
         ctrl_layout.addWidget(QLabel("Font:"))
         self.combo_fonts = QComboBox(self)
         self.combo_fonts.currentIndexChanged.connect(self._on_font_selected)
         ctrl_layout.addWidget(self.combo_fonts)
 
-        # SpinBox Ukuran Font
         ctrl_layout.addWidget(QLabel("Size:"))
         self.spin_font_size = QSpinBox(self)
         self.spin_font_size.setRange(20, 200)
@@ -214,14 +210,12 @@ class PreviewWidget(QWidget):
         self.spin_font_size.valueChanged.connect(self._on_font_size_changed)
         ctrl_layout.addWidget(self.spin_font_size)
 
-        # Tombol Warna Teks
         ctrl_layout.addWidget(QLabel("Text Color:"))
         self.btn_color = QPushButton("Pick Color", self)
         self.btn_color.setStyleSheet(f"background-color: {self.style['text_color']}; color: #000000; font-weight: bold;")
         self.btn_color.clicked.connect(self._on_choose_color)
         ctrl_layout.addWidget(self.btn_color)
 
-        # Tombol Warna Latar (Green Screen / Custom BG)
         ctrl_layout.addWidget(QLabel("Background:"))
         self.btn_bg_color = QPushButton("Pick Color", self)
         self.btn_bg_color.setStyleSheet(f"background-color: {self.video_settings['green_color']}; color: #000000; font-weight: bold;")
@@ -308,19 +302,16 @@ class PreviewWidget(QWidget):
         self.spin_font_size.setValue(int(self.style.get("font_size", 64)))
         self.spin_font_size.blockSignals(False)
 
-        # Sync tombol warna teks
         cur_color = self.style.get("text_color", "#FFFFFF")
         qcol = QColor(cur_color)
         btn_txt = "#000000" if qcol.lightness() > 128 else "#FFFFFF"
         self.btn_color.setStyleSheet(f"background-color: {cur_color}; color: {btn_txt}; font-weight: bold;")
 
-        # Sync tombol warna latar
         cur_bg = self.video_settings.get("green_color", "#00FF00")
         qbg = QColor(cur_bg)
         bg_btn_txt = "#000000" if qbg.lightness() > 128 else "#FFFFFF"
         self.btn_bg_color.setStyleSheet(f"background-color: {cur_bg}; color: {bg_btn_txt}; font-weight: bold;")
 
-        # Sync dropdown font
         cur_font_name = Path(self.style.get("font_path", "")).name
         for i in range(self.combo_fonts.count()):
             f_data = self.combo_fonts.itemData(i)

@@ -1,4 +1,4 @@
-# PROMPT PLAYBOOK — Lyric Green Screen Generator
+# PROMPT PLAYBOOK — Mimik | Turn Audio into Lyrics, Instantly
 
 > **Cara pakai:**
 > 1. Selalu mulai sesi BARU dengan **Prompt 0** dulu (tempel isi
@@ -16,8 +16,7 @@
 ## PROMPT 0 — Kickoff & Konfirmasi Konteks
 
 ```
-Saya sedang membangun aplikasi desktop bernama "Lyric Green Screen
-Generator". Berikut adalah dokumen konteks lengkap proyek ini, yang
+Saya sedang membangun aplikasi desktop bernama "Auto Caption Generator". Berikut adalah dokumen konteks lengkap proyek ini, yang
 berisi tech stack, struktur data, aturan coding, dan struktur folder
 yang WAJIB kamu ikuti selama membantu saya coding proyek ini:
 

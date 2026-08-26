@@ -32,17 +32,16 @@ class FrameRenderer:
 
         self.font = self._load_font()
         self.base_canvas = self._create_base_canvas()
+        self.base_canvas_bytes = self.base_canvas.tobytes("raw", "RGBA")
 
-        # Cache pre-rendered static text layer per segment
         self._segment_layers: Dict[int, Image.Image] = {}
+        self._segment_steady_bytes: Dict[int, bytes] = {}
         self._pre_render_segments()
 
     def _load_font(self) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-        """Memuat font TTF dengan resolusi path yang kompatibel dengan PyInstaller."""
         font_path = self.style.get("font_path", "assets/fonts/Poppins-Bold.ttf")
         font_size = int(self.style.get("font_size", 64))
 
-        # 1. Resolve path aset (mendukung dev dan frozen PyInstaller bundle)
         resolved_font = resolve_asset_path(font_path)
         if resolved_font.exists() and resolved_font.is_file():
             try:
@@ -50,7 +49,6 @@ class FrameRenderer:
             except Exception:
                 pass
 
-        # 2. Fallback jika font kustom tidak terbaca: cari font TrueType standar Linux
         system_fallbacks = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -64,7 +62,6 @@ class FrameRenderer:
                 except Exception:
                     continue
 
-        # 3. Fallback akhir ke FreeType default berukuran proporsional
         try:
             return ImageFont.load_default(size=font_size)
         except TypeError:
@@ -75,7 +72,6 @@ class FrameRenderer:
         return Image.new("RGBA", (self.width, self.height), (*bg_rgb, 255))
 
     def _pre_render_segments(self):
-        """Membuat layer teks pra-render per segmen lirik."""
         color_hex = self.style.get("text_color", "#FFFFFF")
         txt_rgb = ImageColor.getrgb(color_hex)
         pos_type = self.style.get("position", "center")
@@ -101,64 +97,69 @@ class FrameRenderer:
             )
             self._segment_layers[seg_id] = txt_layer
 
-    def render_frame_at_time(self, timestamp: float) -> Image.Image:
-        active_segment = None
-        for seg in self.segments:
-            if seg["start"] <= timestamp <= seg["end"]:
-                active_segment = seg
-                break
+            steady_frame = self.base_canvas.copy()
+            steady_frame.paste(txt_layer, (0, 0), txt_layer)
+            self._segment_steady_bytes[seg_id] = steady_frame.tobytes("raw", "RGBA")
 
-        if not active_segment:
-            return self.base_canvas
-
-        seg_id = active_segment.get("id")
-        cached_layer = self._segment_layers.get(seg_id)
-        if not cached_layer:
-            return self.base_canvas
-
-        start_t = active_segment["start"]
-        end_t = active_segment["end"]
-        t_dur = max(0.01, float(self.style.get("transition_duration", 0.3)))
-        
-        progress_in = (timestamp - start_t) / t_dur if timestamp >= start_t else 0.0
-        progress_out = (end_t - timestamp) / t_dur if timestamp <= end_t else 0.0
-
-        trans_type = self.style.get("transition_type", "fade")
-        transition_func = TRANSITION_REGISTRY.get(trans_type, apply_fade_transition)
-        alpha, _ = transition_func(progress_in, progress_out, base_alpha=255)
-
-        if alpha <= 0:
-            return self.base_canvas
-        elif alpha >= 255:
-            frame = self.base_canvas.copy()
-            frame.paste(cached_layer, (0, 0), cached_layer)
-            return frame
-        else:
-            frame = self.base_canvas.copy()
-            faded_layer = cached_layer.copy()
-            faded_layer.putalpha(faded_layer.getchannel("A").point(lambda a: int(a * (alpha / 255.0))))
-            frame.paste(faded_layer, (0, 0), faded_layer)
-            return frame
-
-    def generate_all_frames(
+    def generate_all_raw_bytes(
         self,
         total_duration: float,
         progress_callback: Optional[Callable[[float], None]] = None,
         is_cancelled: Optional[Callable[[], bool]] = None
-    ) -> Generator[Image.Image, None, None]:
+    ) -> Generator[bytes, None, None]:
+        """Streaming langsung raw bytes ke stdin FFmpeg tanpa overhead konversi ulang."""
         total_frames = int(total_duration * self.fps)
         if total_frames <= 0:
             return
 
         frame_duration = 1.0 / self.fps
+        t_dur = max(0.01, float(self.style.get("transition_duration", 0.3)))
+        trans_type = self.style.get("transition_type", "fade")
+        transition_func = TRANSITION_REGISTRY.get(trans_type, apply_fade_transition)
+
+        current_seg_idx = 0
+        num_segments = len(self.segments)
+
         for frame_idx in range(total_frames):
             if is_cancelled and is_cancelled():
                 raise RenderCancelledException("Render dibatalkan.")
 
-            current_time = frame_idx * frame_duration
-            frame = self.render_frame_at_time(current_time)
+            timestamp = frame_idx * frame_duration
+
+            while current_seg_idx < num_segments and timestamp > self.segments[current_seg_idx]["end"]:
+                current_seg_idx += 1
+
+            active_seg = None
+            if current_seg_idx < num_segments:
+                cand = self.segments[current_seg_idx]
+                if cand["start"] <= timestamp <= cand["end"]:
+                    active_seg = cand
+
+            if not active_seg:
+                yield self.base_canvas_bytes
+            else:
+                seg_id = active_seg.get("id")
+                start_t = active_seg["start"]
+                end_t = active_seg["end"]
+
+                progress_in = (timestamp - start_t) / t_dur if timestamp >= start_t else 0.0
+                progress_out = (end_t - timestamp) / t_dur if timestamp <= end_t else 0.0
+                alpha, _ = transition_func(progress_in, progress_out, base_alpha=255)
+
+                if alpha <= 0:
+                    yield self.base_canvas_bytes
+                elif alpha >= 255:
+                    yield self._segment_steady_bytes.get(seg_id, self.base_canvas_bytes)
+                else:
+                    cached_layer = self._segment_layers.get(seg_id)
+                    if cached_layer:
+                        frame = self.base_canvas.copy()
+                        faded_layer = cached_layer.copy()
+                        faded_layer.putalpha(faded_layer.getchannel("A").point(lambda a: int(a * (alpha / 255.0))))
+                        frame.paste(faded_layer, (0, 0), faded_layer)
+                        yield frame.tobytes("raw", "RGBA")
+                    else:
+                        yield self.base_canvas_bytes
 
             if progress_callback and (frame_idx % max(1, total_frames // 100) == 0):
                 progress_callback((frame_idx + 1) / total_frames * 100.0)
-
-            yield frame

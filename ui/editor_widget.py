@@ -26,7 +26,6 @@ class LyricsEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # Toolbar Editor
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(6)
 
@@ -35,7 +34,6 @@ class LyricsEditorWidget(QWidget):
         self.btn_split = QPushButton("Split")
         self.btn_merge = QPushButton("Merge")
         
-        # Tombol Pengatur Lettercase
         self.btn_upper = QPushButton("UPPERCASE")
         self.btn_lower = QPushButton("lowercase")
         self.btn_title = QPushButton("Title Case")
@@ -61,7 +59,6 @@ class LyricsEditorWidget(QWidget):
 
         layout.addLayout(toolbar_layout)
 
-        # Table Widget
         self.table = QTableWidget(self)
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["ID", "Start (s)", "End (s)", "Lyrics"])
@@ -168,7 +165,6 @@ class LyricsEditorWidget(QWidget):
             if r < len(self.segments):
                 self.segments.pop(r)
         
-        # Re-index id
         for i, s in enumerate(self.segments):
             s["id"] = i + 1
 

@@ -4,8 +4,7 @@ import shutil
 import platform
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable
-from PIL import ImageColor
+from typing import Dict, Any, Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
@@ -19,19 +18,16 @@ def get_ffmpeg_binary_path() -> Path:
     folder_name = "ffmpeg_windows" if is_windows else "ffmpeg_linux"
     rel_path = Path("bin") / folder_name / binary_name
 
-    # 1. Cek bundle PyInstaller
     if getattr(sys, 'frozen', False):
         base_path = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
         candidate = base_path / rel_path
         if candidate.exists() and os.access(candidate, os.X_OK | (os.R_OK if is_windows else 0)):
             return candidate
 
-    # 2. Cek folder lokal proyek
     local_bin = Path.cwd() / rel_path
     if local_bin.exists() and os.access(local_bin, os.X_OK | (os.R_OK if is_windows else 0)):
         return local_bin.resolve()
 
-    # 3. Fallback ke PATH sistem
     system_bin = shutil.which("ffmpeg")
     if system_bin:
         return Path(system_bin).resolve()
@@ -42,9 +38,6 @@ def get_ffmpeg_binary_path() -> Path:
 
 
 class VideoExportWorker(QThread):
-    """
-    Worker ekspor video ultra-cepat: Merender langsung ke stdin FFmpeg (Zero Disk I/O).
-    """
     progress_changed = pyqtSignal(str, float)
     export_finished = pyqtSignal(str)
     export_failed = pyqtSignal(str)
@@ -84,7 +77,6 @@ class VideoExportWorker(QThread):
             if total_frames <= 0:
                 raise ExporterError("Durasi video tidak valid atau kosong.")
 
-            # Command FFmpeg menerima streaming rawvideo langsung lewat pipe stdin
             cmd = [
                 str(ffmpeg_bin),
                 "-y",
@@ -93,10 +85,10 @@ class VideoExportWorker(QThread):
                 "-s", f"{width}x{height}",
                 "-pix_fmt", "rgba",
                 "-r", str(fps),
-                "-i", "pipe:0",                   # Input video dari Python stdin
-                "-i", str(self.audio_path),        # Input audio
+                "-i", "pipe:0",
+                "-i", str(self.audio_path),
                 "-c:v", "libx264",
-                "-preset", "veryfast",             # Encoding preset cepat & efisien
+                "-preset", "veryfast",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-b:a", "192k",
@@ -114,22 +106,20 @@ class VideoExportWorker(QThread):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
-                startupinfo=startupinfo
+                startupinfo=startupinfo,
+                bufsize=10**8
             )
 
             self.progress_changed.emit("Merender dan meng-encode video...", 0.0)
 
-            # Stream setiap frame byte buffer langsung ke FFmpeg
             frame_count = 0
-            for frame_img in self.renderer.generate_all_frames(
+            for raw_bytes in self.renderer.generate_all_raw_bytes(
                 self.total_duration,
                 is_cancelled=lambda: self._is_cancelled
             ):
                 if self._is_cancelled:
                     break
 
-                # Konversi Image ke raw byte RGBA
-                raw_bytes = frame_img.tobytes("raw", "RGBA")
                 try:
                     process.stdin.write(raw_bytes)
                 except (BrokenPipeError, IOError):
@@ -140,7 +130,6 @@ class VideoExportWorker(QThread):
                     percent = min(99.0, (frame_count / total_frames) * 100.0)
                     self.progress_changed.emit(f"Rendering ({percent:.1f}%)...", percent)
 
-            # Tutup pipe stdin agar FFmpeg menyelesaikan finalisasi container MP4
             if process.stdin:
                 process.stdin.close()
 
@@ -167,10 +156,3 @@ class VideoExportWorker(QThread):
         finally:
             if process and process.poll() is None:
                 process.kill()
-
-def get_bundle_dir() -> Path:
-    """Mendapatkan path base proyek baik saat dev maupun bundle executable."""
-    if getattr(sys, 'frozen', False):
-        # Saat running dari PyInstaller binary
-        return Path(sys._MEIPASS if hasattr(sys, '_MEIPASS') else getattr(sys, 'executable', '')).parent
-    return Path(__file__).resolve().parent.parent

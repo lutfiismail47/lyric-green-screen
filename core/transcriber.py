@@ -25,22 +25,18 @@ def resolve_asset_path(relative_path: str | Path) -> Path:
     rel_p = Path(relative_path)
 
     if getattr(sys, 'frozen', False):
-        # 1. Cek di sys._MEIPASS (PyInstaller onedir internal)
         meipass_dir = Path(getattr(sys, '_MEIPASS', ''))
         if (meipass_dir / rel_p).exists():
             return meipass_dir / rel_p
 
-        # 2. Cek di folder _internal di samping binary executable
         exe_dir = Path(sys.executable).parent
         internal_dir = exe_dir / "_internal" / rel_p
         if internal_dir.exists():
             return internal_dir
 
-        # 3. Cek langsung di direktori yang sama dengan executable
         if (exe_dir / rel_p).exists():
             return exe_dir / rel_p
 
-    # 4. Mode Development (saat menjalankan via python main.py)
     dev_path = Path.cwd() / rel_p
     if dev_path.exists():
         return dev_path

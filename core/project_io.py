@@ -28,7 +28,6 @@ def load_project_file(file_path: str | Path) -> Dict[str, Any]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # Validasi struktur data minimal
         required_keys = ["version", "segments", "style", "video_settings"]
         for key in required_keys:
             if key not in data:

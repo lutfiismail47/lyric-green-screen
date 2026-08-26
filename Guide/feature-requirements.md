@@ -12,4 +12,4 @@
 - ✅ Export resolution option: 480p, 720p, 1080p
 - ✅ Save project
 - ✅ Open project
-- ❌ Optimize render process
+- ✅ Optimize render process
