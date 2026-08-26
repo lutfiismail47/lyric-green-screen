@@ -110,31 +110,31 @@ jobs:
       - name: Download Linux Build Artifact
         uses: actions/download-artifact@v4
         with:
-          name: lyric-app-linux
+          name: auto-caption-linux
           path: release-linux/
 
       - name: Download Windows Build Artifact
         uses: actions/download-artifact@v4
         with:
-          name: lyric-app-windows
+          name: auto-caption-windows
           path: release-windows/
 
       - name: Zip Linux Build
         run: |
           cd release-linux
-          zip -r ../lyric-green-screen-linux-${{ github.ref_name }}.zip .
+          zip -r ../auto-caption-generator-linux-${{ github.ref_name }}.zip .
           cd ..
 
       - name: Zip Windows Build
         run: |
           cd release-windows
-          zip -r ../lyric-green-screen-windows-${{ github.ref_name }}.zip .
+          zip -r ../auto-caption-generator-windows-${{ github.ref_name }}.zip .
           cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            lyric-green-screen-linux-${{ github.ref_name }}.zip
-            lyric-green-screen-windows-${{ github.ref_name }}.zip
+            auto-caption-generator-linux-${{ github.ref_name }}.zip
+            auto-caption-generator-windows-${{ github.ref_name }}.zip
           generate_release_notes: true
