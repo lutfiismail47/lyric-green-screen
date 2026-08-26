@@ -1,4 +1,4 @@
-# PROJECT CONTEXT — Lyric Green Screen Generator
+# PROJECT CONTEXT — Mimik | Turn Audio into Lyrics, Instantly
 
 ## 1. RINGKASAN PROYEK
 

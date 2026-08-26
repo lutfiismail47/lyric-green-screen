@@ -12,7 +12,7 @@ def main():
     app = QApplication(sys.argv)
     
     # Identitas aplikasi agar dikenali Desktop Environment Linux & Windows
-    app_id = "com.lyricgenerator.app"
+    app_id = "com.autocaption.app"
     app.setApplicationName("Mimik | Turn Audio into Lyrics, Instantly")
     app.setDesktopFileName(app_id)
 

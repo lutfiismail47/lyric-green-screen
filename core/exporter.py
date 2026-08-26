@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 from PIL import ImageColor
-
 from PyQt6.QtCore import QThread, pyqtSignal
 
 

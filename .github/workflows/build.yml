@@ -21,13 +21,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: lyric-app-linux
+            artifact_name: auto-caption-linux
             ffmpeg_dir: bin/ffmpeg_linux
-            target_binary: lyric-green-screen
+            target_binary: auto-caption-generator
           - os: windows-latest
-            artifact_name: lyric-app-windows
+            artifact_name: auto-caption-windows
             ffmpeg_dir: bin/ffmpeg_windows
-            target_binary: lyric-green-screen.exe
+            target_binary: auto-caption-generator.exe
 
     steps:
       - name: Checkout Source Code
@@ -92,13 +92,13 @@ jobs:
       - name: Build Executable via PyInstaller
         shell: bash
         run: |
-          pyinstaller -y --clean lyric_generator.spec
+          pyinstaller -y --clean auto_caption_generator.spec
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist/lyric-green-screen/
+          path: dist/auto-caption-generator/
           retention-days: 14
 
   release:

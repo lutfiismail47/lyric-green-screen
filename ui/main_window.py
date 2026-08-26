@@ -56,7 +56,7 @@ class TranscriptionWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Lyric Green Screen Generator")
+        self.setWindowTitle("Mimik | Turn Audio into Lyrics, Instantly")
         self.resize(1000, 800)
         self.setMinimumSize(800, 600)
 
@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
         self.editor_area.load_segments([])
         self.waveform_area.load_audio("")
         self.preview_area.update_state(0.0, None)
-        self.setWindowTitle("Lyric Green Screen Generator - Proyek Baru")
+        self.setWindowTitle("Mimik | Turn Audio into Lyrics, Instantly - Proyek Baru")
 
     def _on_save_project(self):
         """Menyimpan data audio, segmen lirik, style, dan video settings ke file .lyricproj."""
@@ -469,7 +469,7 @@ class MainWindow(QMainWindow):
 
         try:
             save_project_file(self.current_project_path, project_data)
-            self.setWindowTitle(f"Lyric Green Screen Generator - {Path(self.current_project_path).name}")
+            self.setWindowTitle(f"Mimik | Turn Audio into Lyrics, Instantly - {Path(self.current_project_path).name}")
             QMessageBox.information(self, "Tersimpan", "Proyek berhasil disimpan!")
         except ProjectIOError as err:
             QMessageBox.critical(self, "Error", f"Gagal menyimpan proyek:\n{err}")

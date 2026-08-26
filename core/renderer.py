@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Callable, Generator
 from PIL import Image, ImageDraw, ImageFont, ImageColor
-
 from ui.preview_widget import (
     TRANSITION_REGISTRY,
     apply_fade_transition,
