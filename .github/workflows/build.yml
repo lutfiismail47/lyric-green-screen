@@ -71,11 +71,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p bin/ffmpeg_linux
-          wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-          tar -xf ffmpeg-release-amd64-static.tar.xz
-          cp ffmpeg-*-amd64-static/ffmpeg bin/ffmpeg_linux/ffmpeg
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz"
+          wget --retry-connrefused --waitretry=5 --tries=3 -O ffmpeg.tar.xz "$url"
+          tar -xf ffmpeg.tar.xz
+          FFMPEG_DIR=$(find . -maxdepth 1 -type d -name "ffmpeg-*-linux64-gpl")
+          cp "$FFMPEG_DIR/bin/ffmpeg" bin/ffmpeg_linux/ffmpeg
           chmod +x bin/ffmpeg_linux/ffmpeg
-          rm -rf ffmpeg-*-amd64-static*
+          rm -rf ffmpeg.tar.xz ffmpeg-*-linux64-gpl
 
       - name: Download FFmpeg Static Binary (Windows)
         if: runner.os == 'Windows'
