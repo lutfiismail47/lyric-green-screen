@@ -21,11 +21,15 @@ def get_ffmpeg_binary_path() -> Path:
     if getattr(sys, 'frozen', False):
         base_path = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
         candidate = base_path / rel_path
-        if candidate.exists() and os.access(candidate, os.X_OK | (os.R_OK if is_windows else 0)):
+        if candidate.exists() and (is_windows or os.access(candidate, os.X_OK)):
             return candidate
 
+        internal_candidate = Path(sys.executable).parent / "_internal" / rel_path
+        if internal_candidate.exists() and (is_windows or os.access(internal_candidate, os.X_OK)):
+            return internal_candidate
+
     local_bin = Path.cwd() / rel_path
-    if local_bin.exists() and os.access(local_bin, os.X_OK | (os.R_OK if is_windows else 0)):
+    if local_bin.exists() and (is_windows or os.access(local_bin, os.X_OK)):
         return local_bin.resolve()
 
     system_bin = shutil.which("ffmpeg")
@@ -63,6 +67,9 @@ class VideoExportWorker(QThread):
 
     def run(self):
         process = None
+        log_file = None
+        log_path = self.output_path.parent / "ffmpeg_export_error.log"
+
         try:
             ffmpeg_bin = get_ffmpeg_binary_path()
             if not self.audio_path.exists():
@@ -101,13 +108,14 @@ class VideoExportWorker(QThread):
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+            log_file = open(log_path, "w", encoding="utf-8", errors="replace")
+
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                startupinfo=startupinfo,
-                bufsize=10**8
+                stderr=log_file,
+                startupinfo=startupinfo
             )
 
             self.progress_changed.emit("Merender dan meng-encode video...", 0.0)
@@ -131,24 +139,47 @@ class VideoExportWorker(QThread):
                     self.progress_changed.emit(f"Rendering ({percent:.1f}%)...", percent)
 
             if process.stdin:
-                process.stdin.close()
+                try:
+                    process.stdin.flush()
+                    process.stdin.close()
+                except Exception:
+                    pass
 
-            stderr_output = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
             process.wait()
+
+            if log_file and not log_file.closed:
+                log_file.close()
 
             if self._is_cancelled:
                 if self.output_path.exists():
                     self.output_path.unlink()
+                if log_path.exists():
+                    log_path.unlink()
                 self.export_failed.emit("Export dibatalkan.")
                 return
 
             if process.returncode != 0:
-                raise ExporterError(f"FFmpeg error:\n{stderr_output}")
+                err_detail = ""
+                if log_path.exists():
+                    try:
+                        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                            err_detail = f.read()[-1000:]
+                    except Exception:
+                        pass
+                raise ExporterError(f"FFmpeg gagal merender video (Exit code: {process.returncode}).\n{err_detail}")
+
+            if log_path.exists():
+                try:
+                    log_path.unlink()
+                except Exception:
+                    pass
 
             self.progress_changed.emit("Selesai!", 100.0)
             self.export_finished.emit(str(self.output_path))
 
         except Exception as e:
+            if log_file and not log_file.closed:
+                log_file.close()
             if self.output_path.exists() and self._is_cancelled:
                 self.output_path.unlink()
             self.export_failed.emit(str(e))
