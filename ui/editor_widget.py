@@ -133,14 +133,50 @@ class LyricsEditorWidget(QWidget):
 
         val = item.text().strip()
         try:
-            if column == 1:
-                self.segments[row]["start"] = max(0.0, float(val))
-            elif column == 2:
-                self.segments[row]["end"] = max(0.0, float(val))
-            elif column == 3:
+            if column == 1:  # Kolom Start (s)
+                new_start = max(0.0, float(val))
+                old_start = float(self.segments[row].get("start", 0.0))
+                delta = new_start - old_start
+
+                if abs(delta) > 1e-4:
+                    # Geser start & end baris saat ini
+                    self.segments[row]["start"] = new_start
+                    self.segments[row]["end"] = max(new_start, round(float(self.segments[row].get("end", 0.0)) + delta, 2))
+
+                    # Ripple: geser semua baris di bawahnya (maju atau mundur)
+                    for r in range(row + 1, len(self.segments)):
+                        s_r = round(max(0.0, float(self.segments[r].get("start", 0.0)) + delta), 2)
+                        e_r = round(max(s_r, float(self.segments[r].get("end", 0.0)) + delta), 2)
+                        self.segments[r]["start"] = s_r
+                        self.segments[r]["end"] = e_r
+
+                    self._refresh_table()
+
+            elif column == 2:  # Kolom End (s)
+                new_end = max(0.0, float(val))
+                old_end = float(self.segments[row].get("end", 0.0))
+                delta = new_end - old_end
+
+                if abs(delta) > 1e-4:
+                    # Update end baris saat ini
+                    self.segments[row]["end"] = max(float(self.segments[row].get("start", 0.0)), new_end)
+
+                    # Ripple: geser semua baris di bawahnya
+                    for r in range(row + 1, len(self.segments)):
+                        s_r = round(max(0.0, float(self.segments[r].get("start", 0.0)) + delta), 2)
+                        e_r = round(max(s_r, float(self.segments[r].get("end", 0.0)) + delta), 2)
+                        self.segments[r]["start"] = s_r
+                        self.segments[r]["end"] = e_r
+
+                    self._refresh_table()
+
+            elif column == 3:  # Kolom Teks Lirik
                 self.segments[row]["text"] = val
+
         except ValueError:
-            pass
+            # Jika user memasukkan format bukan angka, kembalikan tampilan tabel ke nilai lama
+            self._refresh_table()
+            return
 
         self.data_changed.emit()
 
