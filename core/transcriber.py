@@ -81,7 +81,7 @@ class AudioTranscriber:
     def transcribe(
         self,
         audio_path: str | Path,
-        language: Optional[str] = None,
+        language: Optional[str] = "id",
         progress_callback: Optional[Callable[[float], None]] = None,
         is_cancelled: Optional[Callable[[], bool]] = None
     ) -> List[Dict[str, Any]]:

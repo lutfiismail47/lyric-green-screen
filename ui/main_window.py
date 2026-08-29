@@ -44,6 +44,7 @@ class TranscriptionWorker(QThread):
             transcriber = AudioTranscriber(model_path=self.model_path)
             segments = transcriber.transcribe(
                 audio_path=self.audio_path,
+                language="id",  # Mengunci bahasa target ke Bahasa Indonesia
                 progress_callback=self.progress_changed.emit,
                 is_cancelled=lambda: self._is_cancelled
             )
