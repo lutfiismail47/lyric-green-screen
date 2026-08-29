@@ -101,6 +101,11 @@ class LyricsEditorWidget(QWidget):
 
         self.table.blockSignals(False)
 
+    def _reindex_segments(self):
+        """Menata ulang nomor ID setiap segmen dari 1 sampai N secara berurutan."""
+        for idx, seg in enumerate(self.segments):
+            seg["id"] = idx + 1
+
     def _convert_case(self, case_type: str):
         """Mengubah format huruf teks lirik untuk SEMUA segmen secara global."""
         if not self.segments:
@@ -145,16 +150,45 @@ class LyricsEditorWidget(QWidget):
             self.segment_selected.emit(self.segments[selected_rows[0]])
 
     def _add_row(self):
-        new_id = len(self.segments) + 1
-        last_end = self.segments[-1]["end"] if self.segments else 0.0
-        new_seg = {
-            "id": new_id,
-            "start": round(last_end, 2),
-            "end": round(last_end + 2.0, 2),
+        """Menyisipkan baris lirik baru tepat di bawah baris yang sedang dipilih."""
+        selected_row = self.table.currentRow()
+
+        # 1. Tentukan posisi penyisipan dan timing awal-akhir
+        if 0 <= selected_row < len(self.segments):
+            insert_idx = selected_row + 1
+            curr_seg = self.segments[selected_row]
+            new_start = round(float(curr_seg.get("end", 0.0)), 2)
+
+            if insert_idx < len(self.segments):
+                next_start = float(self.segments[insert_idx].get("start", new_start + 2.0))
+                new_end = round(max(new_start + 0.5, min(new_start + 2.0, next_start)), 2)
+            else:
+                new_end = round(new_start + 2.0, 2)
+        else:
+            insert_idx = len(self.segments)
+            if self.segments:
+                last_end = float(self.segments[-1].get("end", 0.0))
+                new_start = round(last_end, 2)
+                new_end = round(last_end + 2.0, 2)
+            else:
+                new_start = 0.0
+                new_end = 2.0
+
+        new_segment = {
+            "id": insert_idx + 1,
+            "start": new_start,
+            "end": new_end,
             "text": "Teks lirik baru"
         }
-        self.segments.append(new_seg)
+
+        # 2. Sisipkan ke data segmen dan perbarui penomoran ID
+        self.segments.insert(insert_idx, new_segment)
+        self._reindex_segments()
+
+        # 3. Refresh tabel dan sorot baris yang baru dibuat
         self._refresh_table()
+        self.table.selectRow(insert_idx)
+
         self.data_changed.emit()
 
     def _delete_selected_rows(self):
@@ -165,9 +199,7 @@ class LyricsEditorWidget(QWidget):
             if r < len(self.segments):
                 self.segments.pop(r)
         
-        for i, s in enumerate(self.segments):
-            s["id"] = i + 1
-
+        self._reindex_segments()
         self._refresh_table()
         self.data_changed.emit()
 
@@ -195,9 +227,7 @@ class LyricsEditorWidget(QWidget):
         self.segments.insert(row, seg2)
         self.segments.insert(row, seg1)
 
-        for i, s in enumerate(self.segments):
-            s["id"] = i + 1
-
+        self._reindex_segments()
         self._refresh_table()
         self.data_changed.emit()
 
@@ -225,8 +255,6 @@ class LyricsEditorWidget(QWidget):
 
         self.segments.insert(first_idx, new_seg)
 
-        for i, s in enumerate(self.segments):
-            s["id"] = i + 1
-
+        self._reindex_segments()
         self._refresh_table()
         self.data_changed.emit()
