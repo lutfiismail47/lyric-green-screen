@@ -22,6 +22,7 @@ from core.transcriber import AudioTranscriber
 from core.renderer import FrameRenderer
 from core.exporter import VideoExportWorker
 from core.project_io import save_project_file, load_project_file, ProjectIOError
+from core.srt_io import export_to_srt, import_from_srt
 
 
 class TranscriptionWorker(QThread):
@@ -44,7 +45,7 @@ class TranscriptionWorker(QThread):
             transcriber = AudioTranscriber(model_path=self.model_path)
             segments = transcriber.transcribe(
                 audio_path=self.audio_path,
-                language="id",  # Mengunci bahasa target ke Bahasa Indonesia
+                language="id",
                 progress_callback=self.progress_changed.emit,
                 is_cancelled=lambda: self._is_cancelled
             )
@@ -66,10 +67,8 @@ class MainWindow(QMainWindow):
         self.current_project_path: Optional[str] = None
 
         self._init_player()
-
         self._init_menu_and_toolbar()
         self._init_ui()
-
         self._connect_signals()
 
         self.render_timer = QTimer(self)
@@ -89,6 +88,8 @@ class MainWindow(QMainWindow):
         self.action_open = QAction("Open Project", self)
         self.action_save = QAction("Save Project", self)
         self.action_import_audio = QAction("Import Audio", self)
+        self.action_import_srt = QAction("Import SRT", self)
+        self.action_export_srt = QAction("Export SRT", self)
         self.action_export_video = QAction("Export Video", self)
         self.action_exit = QAction("Exit", self)
         self.action_exit.triggered.connect(self.close)
@@ -100,6 +101,9 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.action_save)
         toolbar.addSeparator()
         toolbar.addAction(self.action_import_audio)
+        toolbar.addAction(self.action_import_srt)
+        toolbar.addSeparator()
+        toolbar.addAction(self.action_export_srt)
         toolbar.addAction(self.action_export_video)
 
         self.action_import_audio.triggered.connect(self._on_import_audio_dialog)
@@ -153,20 +157,16 @@ class MainWindow(QMainWindow):
         self.btn_play.clicked.connect(self._play_audio)
         self.btn_pause.clicked.connect(self._pause_audio)
         self.btn_stop.clicked.connect(self._stop_audio)
-
         self.player.playbackStateChanged.connect(self._on_playback_state_changed)
-
         self.waveform_area.seek_requested.connect(self._seek_to_time)
-
         self.editor_area.segment_selected.connect(self._on_segment_selected_in_editor)
-
         self.editor_area.data_changed.connect(self._on_editor_data_changed)
-
         self.action_export_video.triggered.connect(self._on_export_video_dialog)
-
         self.action_new.triggered.connect(self._on_new_project)
         self.action_save.triggered.connect(self._on_save_project)
         self.action_open.triggered.connect(self._on_open_project)
+        self.action_import_srt.triggered.connect(self._on_import_srt_dialog)
+        self.action_export_srt.triggered.connect(self._on_export_srt_dialog)
 
     # Audio Playback Logic
 
@@ -488,3 +488,74 @@ class MainWindow(QMainWindow):
 
         except ProjectIOError as err:
             QMessageBox.critical(self, "Error", f"Gagal membuka proyek:\n{err}")
+
+        # SRT Import / Export Handlers
+
+    def _on_export_srt_dialog(self):
+        """Mengekspor daftar transkrip teks saat ini menjadi file .srt."""
+        segments = self.editor_area.export_segments()
+        if not segments:
+            QMessageBox.warning(self, "Peringatan", "Tidak ada transkrip teks untuk diekspor.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Ekspor Subtitle SRT",
+            "captions.srt",
+            "SubRip Subtitle Files (*.srt)"
+        )
+        if not file_path:
+            return
+
+        try:
+            export_to_srt(segments, file_path)
+            QMessageBox.information(
+                self,
+                "Ekspor Selesai",
+                f"File SRT berhasil disimpan!\nTersimpan di:\n{file_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Gagal mengekspor file SRT:\n{e}")
+
+    def _on_import_srt_dialog(self):
+        """Mengimpor file .srt, menggantikan transkrip lama, dan langsung menyinkronkan UI."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Pilih File Subtitle SRT",
+            "",
+            "SubRip Subtitle Files (*.srt)"
+        )
+        if not file_path:
+            return
+
+        try:
+            new_segments = import_from_srt(file_path)
+            if not new_segments:
+                QMessageBox.warning(self, "Peringatan", "File SRT tidak memiliki data subtitle yang valid.")
+                return
+
+            if self.editor_area.export_segments():
+                reply = QMessageBox.question(
+                    self,
+                    "Konfirmasi Ganti Transkrip",
+                    "Mengimpor SRT akan mengganti semua baris transkrip yang ada saat ini.\nLanjutkan?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+
+            self.editor_area.load_segments(new_segments)
+            self.waveform_area.update_segments(new_segments)
+
+            cur_sec = self.player.position() / 1000.0 if self.player else 0.0
+            self._sync_ui_state(cur_sec)
+
+            QMessageBox.information(
+                self,
+                "Import Selesai",
+                f"Berhasil memuat {len(new_segments)} baris subtitle dari file SRT!\n"
+                "Timestamp dan teks telah disinkronkan."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Gagal membaca file SRT:\n{e}")

@@ -83,10 +83,12 @@ class AudioTranscriber:
         audio_path: str | Path,
         language: Optional[str] = "id",
         progress_callback: Optional[Callable[[float], None]] = None,
-        is_cancelled: Optional[Callable[[], bool]] = None
+        is_cancelled: Optional[Callable[[], bool]] = None,
+        max_words_per_segment: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Melakukan transkripsi file audio menjadi list of segment dictionaries.
+        Melakukan transkripsi audio dan memecah kalimat panjang menjadi 
+        maksimal 4-5 kata per segmen dengan timestamp yang presisi.
         """
         if self.model is None:
             raise ModelLoadError("Model belum berhasil diinisialisasi.")
@@ -121,15 +123,43 @@ class AudioTranscriber:
                 if is_cancelled and is_cancelled():
                     break
 
-                text_cleaned = segment.text.strip()
-                if text_cleaned:
-                    formatted_segments.append({
-                        "id": segment_id,
-                        "start": round(float(segment.start), 3),
-                        "end": round(float(segment.end), 3),
-                        "text": text_cleaned
-                    })
-                    segment_id += 1
+                words = list(segment.words) if hasattr(segment, "words") and segment.words else []
+
+                if words:
+                    for i in range(0, len(words), max_words_per_segment):
+                        chunk = words[i:i + max_words_per_segment]
+                        chunk_text = " ".join([w.word.strip() for w in chunk]).strip()
+
+                        if chunk_text:
+                            formatted_segments.append({
+                                "id": segment_id,
+                                "start": round(float(chunk[0].start), 2),
+                                "end": round(float(chunk[-1].end), 2),
+                                "text": chunk_text
+                            })
+                            segment_id += 1
+
+                else:
+                    raw_words = segment.text.strip().split()
+                    if raw_words:
+                        total_w = len(raw_words)
+                        seg_dur = max(0.1, segment.end - segment.start)
+
+                        for i in range(0, total_w, max_words_per_segment):
+                            chunk = raw_words[i:i + max_words_per_segment]
+                            chunk_text = " ".join(chunk).strip()
+
+                            c_start = segment.start + (i / total_w) * seg_dur
+                            c_end = segment.start + (min(i + max_words_per_segment, total_w) / total_w) * seg_dur
+
+                            if chunk_text:
+                                formatted_segments.append({
+                                    "id": segment_id,
+                                    "start": round(float(c_start), 2),
+                                    "end": round(float(c_end), 2),
+                                    "text": chunk_text
+                                })
+                                segment_id += 1
 
                 if progress_callback:
                     current_progress = min(100.0, (segment.end / total_duration) * 100.0)
