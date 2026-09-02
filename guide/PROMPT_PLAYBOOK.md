@@ -1,4 +1,4 @@
-# PROMPT PLAYBOOK — Mimik | Turn Audio into Lyrics, Instantly
+# PROMPT PLAYBOOK — Lyrics Maker
 
 > **Cara pakai:**
 > 1. Selalu mulai sesi BARU dengan **Prompt 0** dulu (tempel isi

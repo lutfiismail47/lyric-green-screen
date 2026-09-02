@@ -1,4 +1,4 @@
-# File Besar / External Binaries (Bagian 3B PROJECT_CONTEXT)
+# File Besar / External Binaries
 # Exclude model weights faster-whisper (didownload saat CI / manual setup lokal)
 assets/models/faster-whisper-base/
 assets/models/*
@@ -14,8 +14,6 @@ bin/ffmpeg_windows/*
 !bin/ffmpeg_windows/README.md
 !bin/ffmpeg_linux/.gitkeep
 !bin/ffmpeg_windows/.gitkeep
-
-# Catatan: assets/fonts/ tetap di-track secara penuh (tidak di-ignore)
 
 # Python Environment & Artifacts
 __pycache__/
@@ -39,17 +37,10 @@ dist/
 .installed.cfg
 *.egg
 
-# Hasil Build PyInstaller yang nyasar ke root (bukan di dalam dist/)
-# Folder pendukung hasil PyInstaller --onedir (berisi semua library +
-# model + ffmpeg yang ikut ter-bundle)
 _internal/
 
-# File executable hasil build (nama tanpa ekstensi, khusus Linux).
-# Pakai slash di depan supaya HANYA match persis di root, tidak di
-# folder lain manapun.
-/lyric-green-screen
-/mimik
-/auto-caption-generator
+# File executable hasil build (khusus Linux)
+/lyrics-maker
 
 # Project Output & Temp Files
 *.mp4

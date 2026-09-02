@@ -10,8 +10,8 @@ from core.transcriber import resolve_asset_path
 def main():
     app = QApplication(sys.argv)
     
-    app_id = "com.autocaption.app"
-    app.setApplicationName("Mimik | Turn Audio into Lyrics, Instantly")
+    app_id = "com.lyrics-maker.app"
+    app.setApplicationName("Lyrics Maker")
     app.setDesktopFileName(app_id)
 
     if sys.platform == "win32":

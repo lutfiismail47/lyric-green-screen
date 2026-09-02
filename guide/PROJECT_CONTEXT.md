@@ -1,4 +1,4 @@
-# PROJECT CONTEXT — Mimik | Turn Audio into Lyrics, Instantly
+# PROJECT CONTEXT — Lyrics Maker
 
 ## 1. RINGKASAN PROYEK
 

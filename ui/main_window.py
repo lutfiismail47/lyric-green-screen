@@ -58,7 +58,7 @@ class TranscriptionWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Mimik | Turn Audio into Lyrics, Instantly")
+        self.setWindowTitle("Lyrics Maker")
         self.resize(1000, 800)
         self.setMinimumSize(800, 600)
 
@@ -414,7 +414,7 @@ class MainWindow(QMainWindow):
         self.editor_area.load_segments([])
         self.waveform_area.load_audio("")
         self.preview_area.update_state(0.0, None)
-        self.setWindowTitle("Mimik | Turn Audio into Lyrics, Instantly - Proyek Baru")
+        self.setWindowTitle("Lyrics Maker - New Project")
 
     def _on_save_project(self):
         """Menyimpan data audio, segmen lirik, style, dan video settings ke file .lyricproj."""
@@ -443,7 +443,7 @@ class MainWindow(QMainWindow):
 
         try:
             save_project_file(self.current_project_path, project_data)
-            self.setWindowTitle(f"Mimik | Turn Audio into Lyrics, Instantly - {Path(self.current_project_path).name}")
+            self.setWindowTitle(f"Lyrics Maker - {Path(self.current_project_path).name}")
             QMessageBox.information(self, "Tersimpan", "Proyek berhasil disimpan!")
         except ProjectIOError as err:
             QMessageBox.critical(self, "Error", f"Gagal menyimpan proyek:\n{err}")
@@ -483,7 +483,7 @@ class MainWindow(QMainWindow):
             self.waveform_area.update_segments(segments)
 
             self._sync_ui_state(0.0)
-            self.setWindowTitle(f"Mimik | Turn Audio into Lyrics, Instantly - {Path(file_path).name}")
+            self.setWindowTitle(f"Lyrics Maker - {Path(file_path).name}")
             QMessageBox.information(self, "Berhasil", "Proyek berhasil dimuat!")
 
         except ProjectIOError as err:
